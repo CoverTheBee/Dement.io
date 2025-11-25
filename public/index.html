@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jeu du Rond</title>
+    <!-- Chargement de Firebase pour l'authentification/persistance -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        if (Object.keys(firebaseConfig).length > 0) {
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            window.db = getFirestore(app);
+            window.auth = auth;
+            
+            if (initialAuthToken) {
+                signInWithCustomToken(auth, initialAuthToken).catch(error => {
+                    console.error("Erreur auth token:", error);
+                    signInAnonymously(auth);
+                });
+            } else {
+                signInAnonymously(auth);
+            }
+            setLogLevel('Debug');
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;700&family=Orbitron:wght@400;700&display=swap');
+
+        :root {
+            --dark-bg: #050510; 
+            --ui-dark-bg: rgba(5, 5, 16, 0.95); 
+            --neon-color: #00fff2; 
+            --xp-color: #ffd700; 
+            --main-font: 'Orbitron', sans-serif; 
+            --text-color: var(--neon-color);
+            
+            /* Couleurs des types */
+            --type-feu: #ff4500;
+            --type-eau: #00bfff;
+            --type-terre: #8b4513;
+            --type-vent: #e0ffff;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; 
+            font-family: var(--main-font);
+            background-color: #050510; 
+            color: white;
+        }
+
+        .screen {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        #menu-screen {
+            flex-direction: column;
+            background: radial-gradient(circle at center, #111122 0%, #000000 100%);
+        }
+
+        .menu-card {
+            background-color: rgba(0, 0, 0, 0.8); 
+            padding: 40px 60px;
+            border-radius: 20px;
+            box-shadow: 0 0 30px rgba(0, 255, 242, 0.5); 
+            text-align: center;
+            border: 5px solid var(--neon-color);
+            max-width: 90%;
+            width: 500px;
+        }
+
+        h1 {
+            color: var(--neon-color);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3.5rem;
+            margin-bottom: 20px;
+            text-shadow: 0 0 15px var(--neon-color);
+        }
+        
+        .type-selection {
+            margin: 30px 0;
+            display: flex;
+            justify-content: space-around;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .type-button {
+            width: 100px;
+            height: 100px;
+            border-radius: 15px;
+            border: 3px solid #555;
+            background-color: #222;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+            font-weight: 700;
+            color: white;
+            position: relative;
+        }
+        
+        .type-button:hover:not(.selected) {
+            transform: translateY(-3px);
+            box-shadow: 0 0 10px var(--neon-color);
+        }
+        
+        .type-button.selected {
+            transform: scale(1.05);
+            border-width: 5px;
+            box-shadow: 0 0 20px var(--neon-color);
+        }
+
+        .type-icon { font-size: 3rem; margin-bottom: 5px; }
+        
+        #type-feu.selected { border-color: var(--type-feu); box-shadow: 0 0 20px var(--type-feu); }
+        #type-eau.selected { border-color: var(--type-eau); box-shadow: 0 0 20px var(--type-eau); }
+        #type-terre.selected { border-color: var(--type-terre); box-shadow: 0 0 20px var(--type-terre); }
+        #type-vent.selected { border-color: var(--type-vent); box-shadow: 0 0 20px var(--type-vent); }
+
+        .play-button {
+            background-color: var(--neon-color);
+            color: #000; 
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 5px 0 0 #00b8aa;
+            text-transform: uppercase;
+        }
+        .play-button:hover:not(:disabled) { background-color: #55ffee; box-shadow: 0 3px 0 0 #00b8aa; transform: translateY(2px); }
+        .play-button:active:not(:disabled) { background-color: #00b8aa; box-shadow: none; transform: translateY(5px); }
+        .play-button:disabled { background-color: #333; box-shadow: 0 3px 0 0 #111; color: #888; cursor: not-allowed; }
+
+        #game-screen { display: none; background-color: var(--dark-bg); }
+        canvas { display: block; }
+        
+        #minimap-canvas {
+            position: absolute;
+            top: 20px; left: 20px;
+            border: 3px solid var(--neon-color);
+            background-color: rgba(0, 0, 0, 0.7); 
+            border-radius: 10px;
+            box-shadow: 0 0 15px var(--neon-color);
+            z-index: 10;
+        }
+        
+        #ui-overlay {
+            position: absolute; top: 0; right: 0; padding: 15px; z-index: 20;
+            display: flex; flex-direction: column; align-items: flex-end;
+            pointer-events: none; 
+        }
+
+        .ui-panel {
+            background-color: var(--ui-dark-bg);
+            color: var(--ui-text-color);
+            padding: 8px 15px; margin-bottom: 8px;
+            border-radius: 8px; font-size: 1.1rem; font-weight: 700;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+            min-width: 200px; text-align: right;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        #level-info {
+            display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+            font-size: 1.5rem; padding-bottom: 0; border: none; background: none; margin-bottom: 0;
+        }
+        
+        #level-text { color: var(--xp-color); text-shadow: 0 0 8px var(--xp-color); margin-right: 5px; }
+
+        #exp-bar-container {
+            width: 300px; height: 25px;
+            background-color: rgba(0, 0, 0, 0.5); 
+            border-radius: 12px; overflow: hidden;
+            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.8), 0 0 10px var(--xp-color);
+            margin-top: 5px; border: 2px solid var(--xp-color);
+            position: relative;
+        }
+
+        #exp-progress {
+            height: 100%; background: linear-gradient(to right, #ffbb00, #ffd700);
+            transition: width 0.3s ease; position: absolute; top: 0; left: 0; border-radius: 10px;
+        }
+
+        #exp-label {
+            position: absolute; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+            color: #000; text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5); font-size: 14px;
+        }
+        
+        #hp-info { border-color: #ff0077; color: white; }
+        #type-info { border-color: var(--neon-color); text-align: center; color: white; }
+        
+        @media (max-width: 600px) {
+            #exp-bar-container { width: 90vw; max-width: 300px; }
+            #ui-overlay { width: 100%; align-items: center; padding: 10px 0; }
+            .ui-panel { min-width: unset; width: 90vw; max-width: 300px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="menu-screen" class="screen">
+        <div class="menu-card">
+            <h1>Le Jeu du Rond</h1>
+            <p style="color: white; margin-bottom: 10px; font-size: 1.2rem; font-weight: 700;">Choisissez votre Type Élémentaire :</p>
+            <div class="type-selection">
+                <button id="type-feu" class="type-button" data-type="FEU"><span class="type-icon">🔥</span>Feu</button>
+                <button id="type-eau" class="type-button" data-type="EAU"><span class="type-icon">💧</span>Eau</button>
+                <button id="type-terre" class="type-button" data-type="TERRE"><span class="type-icon">🌳</span>Terre</button>
+                <button id="type-vent" class="type-button" data-type="VENT"><span class="type-icon">💨</span>Vent</button>
+            </div>
+            <p style="color: white; margin-bottom: 30px;">Déplacez-vous avec ZQSD et tirez avec la souris !</p>
+            <button id="play-button" class="play-button" disabled>Commencer la Partie</button>
+        </div>
+    </div>
+
+    <div id="room-selection" style="margin: 1rem 0; display: none;">
+    <div style="color: var(--neon-blue); margin-bottom: 0.5rem;">Rejoindre un salon :</div>
+    <input type="text" id="room-input" placeholder="Nom du salon (ex: combat1)" 
+           style="padding: 0.5rem; border: 2px solid var(--neon-blue); background: rgba(0,0,0,0.5); color: white; border-radius: 5px; width: 200px;">
+    <button id="join-room-btn" style="padding: 0.5rem 1rem; margin-left: 0.5rem; background: var(--neon-blue); border: none; border-radius: 5px; cursor: pointer;">Rejoindre</button>
+    <div style="margin-top: 0.5rem; font-size: 0.9rem; color: #888;">
+        Ou laisse vide pour le salon principal
+    </div>
+</div>
+
+<!-- AJOUTE cette info dans le jeu -->
+<div id="room-info" class="ui-panel" style="top: 80px; left: 20px; border-color: var(--neon-pink);">
+    Salon: <span id="current-room">Principal</span>
+</div>
+
+    <div id="game-screen" class="screen">
+        <canvas id="game-canvas"></canvas>
+        <canvas id="minimap-canvas"></canvas> 
+        <div id="ui-overlay">
+            <div id="level-info"><span id="level-text"></span></div>
+            <div id="exp-bar-container"><div id="exp-progress"></div><div id="exp-label"></div></div>
+            <div id="hp-info" class="ui-panel"></div>
+            <div id="type-info" class="ui-panel"></div>
+        </div>
+    </div>
+
+    <script>
+        const WORLD_SIZE = 15000;
+        const PLAYER_SPEED = 0.3; 
+        const MAX_VELOCITY = 4; 
+        const BASE_PROJECTILE_DAMAGE = 10; 
+        const PROJECTILE_DURATION = 2000;
+        const PLAYER_RADIUS = 20;
+        const GRID_SPACING = 50;
+        
+        // AJUSTEMENT DES BALLES: Moins vite (15->10), plus grosses dans le code Projectile
+        const PLAYER_TYPES = {
+            'FEU': { name: 'Feu', color: '#ff4500', damageModifier: 1.2, speedModifier: 1.0, baseProjectileSpeed: 10 },
+            'EAU': { name: 'Eau', color: '#00bfff', damageModifier: 1.0, speedModifier: 1.1, baseProjectileSpeed: 10 },
+            'TERRE': { name: 'Terre', color: '#8b4513', damageModifier: 1.1, speedModifier: 0.9, baseProjectileSpeed: 10 },
+            'VENT': { name: 'Vent', color: '#e0ffff', damageModifier: 0.8, speedModifier: 1.2, baseProjectileSpeed: 10 }
+        };
+
+        const XP_LEVEL_THRESHOLDS = [300, 600, 1200, 2100, 3400, 5000, 7000, 9500, 12500];
+        const MAX_LEVEL = XP_LEVEL_THRESHOLDS.length + 1; 
+        
+        const XP_ORB_HEALTH = 30; 
+        const XP_ORB_VALUE = 5;    
+        const TRIANGLE_COUNT = 800; 
+        
+        const SQUARE_COUNT = 150; 
+        const SQUARE_HEALTH = XP_ORB_HEALTH * 5; 
+        const SQUARE_VALUE = XP_ORB_VALUE * 5;     
+        const SQUARE_COLOR = '#ffcc00'; 
+        const SQUARE_RADIUS = 15; 
+        
+        const MEGA_VIRUS_COUNT = 15; 
+        const MEGA_VIRUS_RADIUS = 100; 
+        const MEGA_VIRUS_HEALTH = 1500; 
+        const MEGA_VIRUS_VALUE = 250;
+        const MEGA_VIRUS_COLOR = '#8b008b'; 
+        const ATTACK_INTERVAL = 10000; 
+        
+        const VIRUS_PROJECTILE_DAMAGE = 25; 
+        const VIRUS_PROJECTILE_DURATION = 1500; 
+        const VIRUS_PROJECTILE_INITIAL_SPEED = 22; 
+        const VIRUS_PROJECTILE_DECELERATION_RATE = 0.96; 
+        
+        const FRAGMENTS_COUNT = 8;
+        const FRICTION = 0.90; 
+        const REPULSION_FORCE = 1.0; 
+        const MINIMAP_SIZE = 200;
+        let MINIMAP_SCALE = MINIMAP_SIZE / WORLD_SIZE; 
+
+        const menuScreen = document.getElementById('menu-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const playButton = document.getElementById('play-button');
+        const typeButtons = document.querySelectorAll('.type-button');
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const minimapCanvas = document.getElementById('minimap-canvas');
+        const minimapCtx = minimapCanvas.getContext('2d');
+        const levelText = document.getElementById('level-text');
+        const expProgress = document.getElementById('exp-progress');
+        const expLabel = document.getElementById('exp-label');
+        const hpInfo = document.getElementById('hp-info');
+        const typeInfo = document.getElementById('type-info');
+
+        let lastTime = 0;
+        let running = false;
+        let keys = { 'z': false, 's': false, 'q': false, 'd': false };
+        let mouse = { x: 0, y: 0 };
+        let player = {
+            x: WORLD_SIZE / 2, y: WORLD_SIZE / 2,
+            radius: PLAYER_RADIUS, velX: 0, velY: 0, mass: 10,
+            xp: 0, level: 1, hp: 100, maxHp: 100,
+            type: null, projectileColor: '#ff6b6b', 
+            damageModifier: 1.0, speedModifier: 1.0, baseProjectileSpeed: 15,
+        };
+        let projectiles = []; 
+        let virusProjectiles = []; 
+        let xpOrbs = [];
+        let fragments = [];
+        let camera = { x: 0, y: 0 };
+        let screenWidth, screenHeight;
+        let currentTime = 0;
+        
+        const userId = (window.auth && window.auth.currentUser) ? window.auth.currentUser.uid : (crypto.randomUUID ? crypto.randomUUID() : 'anonymous_user');
+        
+        function getRequiredTotalExpForNextLevel(currentLevel) {
+            const index = currentLevel - 1; 
+            if (index >= 0 && index < XP_LEVEL_THRESHOLDS.length) return XP_LEVEL_THRESHOLDS[index];
+            return Infinity; 
+        }
+
+        function checkLevelUp() {
+            let leveledUp = false;
+            while (player.level < MAX_LEVEL) {
+                const nextLevelThreshold = getRequiredTotalExpForNextLevel(player.level);
+                if (player.xp >= nextLevelThreshold) {
+                    player.level++;
+                    leveledUp = true;
+                    player.hp = player.maxHp; 
+                    updateUI(); 
+                } else {
+                    break;
+                }
+            }
+            return leveledUp;
+        }
+
+        class Fragment {
+            constructor(x, y, velX, velY, color, size = 3) {
+                this.x = x; this.y = y; this.velX = velX; this.velY = velY;
+                this.color = color; this.radius = size; this.life = 100; this.maxLife = 100;
+            }
+            update() {
+                this.x += this.velX; this.y += this.velY;
+                this.velX *= FRICTION; this.velY *= FRICTION;
+                this.life -= 1.5;
+            }
+            draw(ctx, cameraX, cameraY) {
+                const screenX = this.x - cameraX; const screenY = this.y - cameraY;
+                const opacity = Math.max(0, this.life / this.maxLife); 
+                ctx.save(); ctx.globalAlpha = opacity;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.moveTo(screenX, screenY - this.radius);
+                ctx.lineTo(screenX + this.radius, screenY + this.radius);
+                ctx.lineTo(screenX - this.radius, screenY + this.radius);
+                ctx.closePath(); ctx.fill(); ctx.restore();
+            }
+        }
+        
+        class VirusProjectile {
+            constructor(x, y, dirNormX, dirNormY, damage) {
+                this.x = x; this.y = y;
+                this.dirNormX = dirNormX; this.dirNormY = dirNormY; 
+                this.currentSpeed = VIRUS_PROJECTILE_INITIAL_SPEED; 
+                this.radius = 8; this.color = '#ff6666'; 
+                this.spawnTime = Date.now(); this.damage = damage;
+                this.angle = Math.atan2(this.dirNormY, this.dirNormX); 
+            }
+            update() {
+                this.currentSpeed = Math.max(0.1, this.currentSpeed * VIRUS_PROJECTILE_DECELERATION_RATE);
+                const velX = this.dirNormX * this.currentSpeed;
+                const velY = this.dirNormY * this.currentSpeed;
+                this.x += velX; this.y += velY;
+            }
+            draw(ctx, cameraX, cameraY) {
+                const screenX = this.x - cameraX; const screenY = this.y - cameraY;
+                const lifeTime = Date.now() - this.spawnTime;
+                const opacity = Math.max(0, 1 - (lifeTime / VIRUS_PROJECTILE_DURATION)); 
+                ctx.save(); ctx.globalAlpha = opacity;
+                ctx.translate(screenX, screenY); ctx.rotate(this.angle + Math.PI / 2); 
+                const size = this.radius * 1.5;
+                ctx.fillStyle = this.color; ctx.shadowColor = '#ff0000'; ctx.shadowBlur = 5;
+                ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(size, size); ctx.lineTo(-size, size); ctx.closePath(); ctx.fill();
+                ctx.restore(); 
+            }
+            isExpired() { return Date.now() - this.spawnTime > VIRUS_PROJECTILE_DURATION; }
+        }
+
+        class XpOrb {
+            constructor(x, y) {
+                this.x = x; this.y = y; this.radius = 12; this.color = '#76ff7a'; 
+                this.velX = 0; this.velY = 0;
+                this.baseVelX = (Math.random() - 0.5) * 0.1; this.baseVelY = (Math.random() - 0.5) * 0.1;
+                this.mass = 5; this.maxHealth = XP_ORB_HEALTH; this.health = XP_ORB_HEALTH;
+                this.isHit = false; this.xpValue = XP_ORB_VALUE; this.isFixedCount = false; 
+            }
+            takeDamage(damage) { this.isHit = true; this.health -= damage; }
+            explode() {
+                for (let i = 0; i < FRAGMENTS_COUNT; i++) {
+                    const angle = Math.random() * Math.PI * 2; const speed = Math.random() * 5 + 1;
+                    const velX = Math.cos(angle) * speed; const velY = Math.sin(angle) * speed;
+                    fragments.push(new Fragment(this.x, this.y, velX, velY, this.color, 3));
+                }
+            }
+            update(time) {
+                this.x += this.baseVelX; this.y += this.baseVelY;
+                this.x += this.velX; this.y += this.velY;
+                this.velX *= FRICTION; this.velY *= FRICTION;
+                if (this.x <= this.radius || this.x >= WORLD_SIZE - this.radius) {
+                    this.baseVelX *= -1; this.velX *= -1;
+                    this.x = Math.max(this.radius, Math.min(WORLD_SIZE - this.radius, this.x));
+                }
+                if (this.y <= this.radius || this.y >= WORLD_SIZE - this.radius) {
+                    this.baseVelY *= -1; this.velY *= -1;
+                    this.y = Math.max(this.radius, Math.min(WORLD_SIZE - this.radius, this.y));
+                }
+                this.drawOffsetX = Math.sin(time / 150) * 0.5;
+                this.drawOffsetY = Math.sin(time / 150) * 0.5;
+            }
+            draw(ctx, cameraX, cameraY) {
+                const screenX = this.x - cameraX + this.drawOffsetX;
+                const screenY = this.y - cameraY + this.drawOffsetY;
+                const currentRadius = this.radius;
+                ctx.save(); ctx.globalAlpha = 1.0; ctx.fillStyle = this.color;
+                ctx.beginPath(); ctx.moveTo(screenX, screenY - currentRadius);
+                ctx.lineTo(screenX + currentRadius, screenY + currentRadius / 2);
+                ctx.lineTo(screenX - currentRadius, screenY + currentRadius / 2);
+                ctx.closePath(); ctx.fill(); ctx.restore(); 
+                if (this.isHit) { this.drawHealthBar(ctx, screenX, screenY, this.radius * 3, 4, 5); }
+            }
+            drawHealthBar(ctx, screenX, screenY, barWidth, barHeight, offset) {
+                const x = screenX - barWidth / 2;
+                const y = screenY - this.radius - offset;
+                const healthRatio = Math.max(0, this.health / this.maxHealth);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                ctx.fillRect(x, y, barWidth, barHeight);
+                ctx.fillStyle = healthRatio > 0.5 ? '#00ff00' : (healthRatio > 0.2 ? '#ffff00' : '#ff0000');
+                ctx.fillRect(x, y, barWidth * healthRatio, barHeight);
+            }
+        }
+        
+        class PreciousSquare extends XpOrb {
+            constructor(x, y) {
+                super(x, y);
+                this.radius = SQUARE_RADIUS; this.color = SQUARE_COLOR;
+                this.baseVelX = (Math.random() - 0.5) * 0.05; this.baseVelY = (Math.random() - 0.5) * 0.05;
+                this.mass = 20; this.maxHealth = SQUARE_HEALTH; this.health = SQUARE_HEALTH; this.xpValue = SQUARE_VALUE;
+            }
+            explode() {
+                for (let i = 0; i < FRAGMENTS_COUNT * 2; i++) { 
+                    const angle = Math.random() * Math.PI * 2; const speed = Math.random() * 8 + 2;
+                    const velX = Math.cos(angle) * speed; const velY = Math.sin(angle) * speed;
+                    fragments.push(new Fragment(this.x, this.y, velX, velY, '#ffd700', 5));
+                }
+            }
+            update(time) {
+                super.update(time);
+                this.drawOffsetX = Math.cos(time / 100) * 0.7; 
+                this.drawOffsetY = Math.cos(time / 100) * 0.7;
+            }
+            draw(ctx, cameraX, cameraY) {
+                const screenX = this.x - cameraX + this.drawOffsetX;
+                const screenY = this.y - cameraY + this.drawOffsetY;
+                const size = this.radius * 1.5; 
+                ctx.save(); ctx.globalAlpha = 1.0; ctx.fillStyle = this.color;
+                ctx.shadowColor = '#ffed8d'; ctx.shadowBlur = 15;
+                ctx.fillRect(screenX - size / 2, screenY - size / 2, size, size);
+                ctx.shadowBlur = 0; ctx.fillStyle = 'white';
+                ctx.fillRect(screenX - 2, screenY - 2, 4, 4); 
+                ctx.restore(); 
+                if (this.isHit) { this.drawHealthBar(ctx, screenX, screenY, this.radius * 3.5, 6, 10); }
+            }
+        }
+        
+        class MegaVirus extends XpOrb {
+             constructor(x, y) {
+                super(x, y);
+                this.radius = MEGA_VIRUS_RADIUS; 
+                this.currentRadius = MEGA_VIRUS_RADIUS; 
+                this.color = MEGA_VIRUS_COLOR; 
+                this.baseVelX = (Math.random() - 0.5) * 0.01; this.baseVelY = (Math.random() - 0.5) * 0.01;
+                this.mass = 100; 
+                this.maxHealth = MEGA_VIRUS_HEALTH; this.health = MEGA_VIRUS_HEALTH; this.xpValue = MEGA_VIRUS_VALUE;
+                this.isFixedCount = true; 
+                this.lastAttackTime = Date.now() + Math.random() * ATTACK_INTERVAL; 
+                this.tentacles = [];
+                for(let i = 0; i < 12; i++) { this.tentacles.push(Math.random() * Math.PI * 2); }
+            }
+            explode() {
+                for (let i = 0; i < FRAGMENTS_COUNT * 5; i++) { 
+                    const angle = Math.random() * Math.PI * 2; const speed = Math.random() * 10 + 5;
+                    const velX = Math.cos(angle) * speed; const velY = Math.sin(angle) * speed;
+                    fragments.push(new Fragment(this.x, this.y, velX, velY, '#ff33aa', 8)); 
+                }
+            }
+            handleAttack() {
+                const now = Date.now();
+                if (now - this.lastAttackTime >= ATTACK_INTERVAL) {
+                    this.attack();
+                    this.lastAttackTime = now; 
+                }
+            }
+            update(time) {
+                super.update(time); 
+                const pulse = Math.sin(time / 500) * 0.1 + 1; 
+                this.currentRadius = this.radius * pulse; 
+                this.drawOffsetX = Math.sin(time / 50) * 2; 
+                this.drawOffsetY = Math.cos(time / 50) * 2;
+                this.handleAttack();
+                for(let i = 0; i < this.tentacles.length; i++) {
+                    this.tentacles[i] += Math.sin(time / 500 + i) * 0.01;
+                }
+            }
+            attack() {
+                const numProjectiles = 16; 
+                for (let i = 0; i < numProjectiles; i++) {
+                    const angle = (Math.PI * 2 / numProjectiles) * i;
+                    const dirNormX = Math.cos(angle); const dirNormY = Math.sin(angle);
+                    virusProjectiles.push(new VirusProjectile(this.x, this.y, dirNormX, dirNormY, VIRUS_PROJECTILE_DAMAGE));
+                }
+            }
+            draw(ctx, cameraX, cameraY) {
+                const screenX = this.x - cameraX + this.drawOffsetX;
+                const screenY = this.y - cameraY + this.drawOffsetY;
+                const r = this.currentRadius; 
+                ctx.save(); ctx.translate(screenX, screenY);
+                ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
+                ctx.shadowColor = '#ff66ff'; ctx.shadowBlur = 20; ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, r * 0.3, 0, Math.PI * 2);
+                ctx.shadowBlur = 0; ctx.fill();
+                ctx.strokeStyle = '#d000d0'; ctx.lineWidth = 5; ctx.shadowColor = '#d000d0'; ctx.shadowBlur = 10;
+                this.tentacles.forEach(angle => {
+                    ctx.beginPath(); ctx.moveTo(0, 0);
+                    const endX = Math.cos(angle) * r * 1.3; const endY = Math.sin(angle) * r * 1.3;
+                    ctx.lineTo(endX, endY); ctx.stroke();
+                });
+                ctx.restore();
+                if (this.isHit) { this.drawHealthBar(ctx, screenX, screenY, r * 2.5, 10, r + 20); }
+            }
+        }
+
+        class Projectile {
+            constructor(x, y, angle, damage, type) {
+                this.x = x; this.y = y; this.angle = angle;
+                this.type = type;
+                this.speed = player.baseProjectileSpeed;
+                this.velX = Math.cos(angle) * this.speed; this.velY = Math.sin(angle) * this.speed;
+                // Projectile plus gros
+                this.radius = 10; 
+                this.color = player.projectileColor;
+                this.spawnTime = Date.now(); this.damage = damage;
+                // Pour l'effet de terre (rotation)
+                this.rotationAngle = 0;
+                this.spin = (Math.random() - 0.5) * 0.2;
+            }
+            update() { 
+                this.x += this.velX; this.y += this.velY; 
+                this.rotationAngle += this.spin;
+            }
+            draw(ctx, cameraX, cameraY) {
+                const screenX = this.x - cameraX; const screenY = this.y - cameraY;
+                const lifeTime = Date.now() - this.spawnTime;
+                const opacity = Math.max(0, 1 - (lifeTime / PROJECTILE_DURATION)); 
+                
+                ctx.save(); 
+                ctx.globalAlpha = opacity;
+                ctx.translate(screenX, screenY);
+                
+                // Dessin spécifique selon le type
+                if (this.type === 'FEU') {
+                    const gradient = ctx.createRadialGradient(0, 0, 2, 0, 0, this.radius);
+                    gradient.addColorStop(0, '#ffffcc'); // Coeur blanc/jaune
+                    gradient.addColorStop(0.5, '#ffaa00');
+                    gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+                    ctx.fillStyle = gradient;
+                    ctx.shadowColor = '#ff4500'; ctx.shadowBlur = 15;
+                    ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI * 2); ctx.fill();
+                } 
+                else if (this.type === 'EAU') {
+                    const gradient = ctx.createRadialGradient(-3, -3, 2, 0, 0, this.radius);
+                    gradient.addColorStop(0, '#ffffff');
+                    gradient.addColorStop(1, '#00bfff');
+                    ctx.fillStyle = gradient;
+                    ctx.shadowColor = '#0099ff'; ctx.shadowBlur = 8;
+                    ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI * 2); ctx.fill();
+                    // Reflet blanc
+                    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                    ctx.beginPath(); ctx.arc(-3, -3, 2, 0, Math.PI*2); ctx.fill();
+                }
+                else if (this.type === 'TERRE') {
+                    ctx.rotate(this.rotationAngle);
+                    ctx.fillStyle = '#8b4513';
+                    ctx.strokeStyle = '#5d2906';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    const sides = 6;
+                    for(let i=0; i<sides; i++) {
+                        const a = (i/sides)*Math.PI*2;
+                        const r = this.radius * (0.8 + Math.random()*0.4); // Irrégulier
+                        const px = Math.cos(a) * r; const py = Math.sin(a) * r;
+                        if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                    }
+                    ctx.closePath(); ctx.fill(); ctx.stroke();
+                }
+                else if (this.type === 'VENT') {
+                    // Tranche de vent orientée vers le mouvement
+                    ctx.rotate(this.angle);
+                    ctx.fillStyle = 'rgba(200, 255, 255, 0.6)';
+                    ctx.shadowColor = '#e0ffff'; ctx.shadowBlur = 10;
+                    ctx.beginPath();
+                    // Forme de croissant
+                    ctx.arc(0, 0, this.radius, -Math.PI/2, Math.PI/2, false);
+                    ctx.bezierCurveTo(0, this.radius/2, 0, -this.radius/2, 0, -this.radius);
+                    ctx.fill();
+                }
+                else {
+                    // Fallback
+                    ctx.fillStyle = this.color; ctx.shadowColor = this.color; ctx.shadowBlur = 10;
+                    ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI * 2); ctx.fill();
+                }
+                
+                ctx.restore(); 
+            }
+            isExpired() { return Date.now() - this.spawnTime > PROJECTILE_DURATION; }
+        }
+        
+        // --- Fonctions de Dessin Spécifiques aux Types (Player) ---
+        function drawFireOrb(ctx, r) {
+            const timeFactor = currentTime / 100;
+            ctx.save();
+            const gradient = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r);
+            gradient.addColorStop(0, '#ffeb3b'); gradient.addColorStop(0.4, '#ff9800'); gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+            ctx.fillStyle = gradient; ctx.shadowColor = '#ff4500'; ctx.shadowBlur = 20;
+            ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+            for(let i=0; i<5; i++) {
+                const angle = Math.random() * Math.PI * 2; const dist = Math.random() * r;
+                ctx.fillStyle = 'rgba(255, 200, 0, 0.5)';
+                ctx.beginPath(); ctx.arc(Math.cos(angle)*dist, Math.sin(angle)*dist, 2, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        function drawWaterDrop(ctx, r) {
+            ctx.save();
+            const gradient = ctx.createRadialGradient(-r*0.3, -r*0.3, r*0.1, 0, 0, r);
+            gradient.addColorStop(0, '#e0ffff'); gradient.addColorStop(0.5, '#00bfff'); gradient.addColorStop(1, '#00008b');
+            ctx.fillStyle = gradient; ctx.shadowColor = '#00bfff'; ctx.shadowBlur = 15;
+            ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.beginPath(); ctx.ellipse(-r*0.3, -r*0.3, r*0.2, r*0.1, Math.PI/4, 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+        }
+
+        function drawEarthRock(ctx, r) {
+            ctx.save();
+            const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+            gradient.addColorStop(0, '#8b4513'); gradient.addColorStop(1, '#3e2723');
+            ctx.fillStyle = gradient; ctx.shadowColor = '#000'; ctx.shadowBlur = 5;
+            ctx.beginPath();
+            const sides = 7;
+            for (let i = 0; i < sides; i++) {
+                const angle = (i / sides) * Math.PI * 2;
+                const radius = r * (0.8 + Math.sin(i * 132) * 0.2); 
+                const x = Math.cos(angle) * radius; const y = Math.sin(angle) * radius;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#2e1a12'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawWindCurrent(ctx, r) {
+            const timeFactor = currentTime / 200;
+            ctx.save();
+            ctx.strokeStyle = '#e0ffff'; ctx.lineWidth = 2; ctx.shadowColor = '#e0ffff'; ctx.shadowBlur = 10;
+            for(let i=0; i<3; i++) {
+                ctx.beginPath(); ctx.arc(0, 0, r * (0.5 + i*0.2), timeFactor + i, timeFactor + i + Math.PI); ctx.stroke();
+            }
+            ctx.fillStyle = 'rgba(224, 255, 255, 0.5)';
+            ctx.beginPath(); ctx.arc(0, 0, r*0.3, 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+        }
+
+        function drawGlobalHealthBar(ctx, screenX, screenY, barWidth, barHeight, offset, currentHp, maxHp) {
+            const x = screenX - barWidth / 2;
+            const y = screenY - offset;
+            const healthRatio = Math.max(0, currentHp / maxHp);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(x, y, barWidth, barHeight);
+            ctx.fillStyle = healthRatio > 0.5 ? '#00ff00' : (healthRatio > 0.2 ? '#ffff00' : '#ff0000');
+            ctx.fillRect(x, y, barWidth * healthRatio, barHeight);
+        }
+
+        function drawPlayer(ctx, p, cameraX, cameraY) {
+            const screenX = p.x - cameraX;
+            const screenY = p.y - cameraY;
+            const r = p.radius;
+            
+            ctx.save();
+            ctx.translate(screenX, screenY);
+            
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(0, 0, r + 5, 0, Math.PI * 2); ctx.stroke();
+
+            switch (p.type) {
+                case 'FEU': drawFireOrb(ctx, r); break;
+                case 'EAU': drawWaterDrop(ctx, r); break;
+                case 'TERRE': drawEarthRock(ctx, r); break;
+                case 'VENT': drawWindCurrent(ctx, r); break;
+                default:
+                    ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill(); break;
+            }
+            ctx.restore();
+
+            const barWidth = r * 4; const barHeight = 8; const yOffset = r + 15;
+            drawGlobalHealthBar(ctx, screenX, screenY, barWidth, barHeight, yOffset, p.hp, p.maxHp);
+            
+            ctx.fillStyle = 'white'; ctx.font = '12px Orbitron'; ctx.textAlign = 'center';
+            ctx.fillText(`Niv. ${p.level}`, screenX, screenY + r + 40);
+        }
+
+        function initGame() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            screenWidth = canvas.width;
+            screenHeight = canvas.height;
+            
+            minimapCanvas.width = MINIMAP_SIZE;
+            minimapCanvas.height = MINIMAP_SIZE;
+            MINIMAP_SCALE = MINIMAP_SIZE / WORLD_SIZE; 
+
+            xpOrbs = [];
+            for (let i = 0; i < TRIANGLE_COUNT; i++) xpOrbs.push(createRandomOrb());
+            for (let i = 0; i < SQUARE_COUNT; i++) xpOrbs.push(createRandomSquare());
+            for (let i = 0; i < MEGA_VIRUS_COUNT; i++) xpOrbs.push(createRandomMegaVirus());
+            
+            player.x = WORLD_SIZE / 2;
+            player.y = WORLD_SIZE / 2;
+            player.velX = 0;
+            player.velY = 0;
+            player.hp = player.maxHp;
+            
+            menuScreen.style.display = 'none';
+            gameScreen.style.display = 'flex';
+            
+            if (!running) {
+                running = true;
+                requestAnimationFrame(gameLoop);
+            }
+            updateUI(); 
+        }
+
+        function createRandomOrb() {
+            return new XpOrb(Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE);
+        }
+
+        function createRandomSquare() {
+            return new PreciousSquare(Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE);
+        }
+
+        function createRandomMegaVirus() {
+            let x, y;
+            do {
+                x = Math.random() * WORLD_SIZE;
+                y = Math.random() * WORLD_SIZE;
+            } while (Math.abs(x - WORLD_SIZE / 2) < WORLD_SIZE / 4 && Math.abs(y - WORLD_SIZE / 2) < WORLD_SIZE / 4);
+            return new MegaVirus(x, y);
+        }
+
+        function updatePlayer(deltaTime) {
+            let accelX = 0; let accelY = 0;
+            const speed = PLAYER_SPEED * player.speedModifier;
+
+            if (keys['z']) accelY -= speed;
+            if (keys['s']) accelY += speed;
+            if (keys['q']) accelX -= speed;
+            if (keys['d']) accelX += speed;
+
+            player.velX += accelX * deltaTime;
+            player.velY += accelY * deltaTime;
+            player.velX *= FRICTION;
+            player.velY *= FRICTION;
+
+            const currentVelocity = Math.sqrt(player.velX * player.velX + player.velY * player.velY);
+            if (currentVelocity > MAX_VELOCITY) {
+                const ratio = MAX_VELOCITY / currentVelocity;
+                player.velX *= ratio;
+                player.velY *= ratio;
+            }
+
+            player.x += player.velX;
+            player.y += player.velY;
+            player.x = Math.max(player.radius, Math.min(WORLD_SIZE - player.radius, player.x));
+            player.y = Math.max(player.radius, Math.min(WORLD_SIZE - player.radius, player.y));
+            
+            camera.x = player.x - screenWidth / 2;
+            camera.y = player.y - screenHeight / 2;
+        }
+        
+        function updateEntities(deltaTime) {
+            projectiles = projectiles.filter(p => {
+                p.update();
+                for (let i = 0; i < xpOrbs.length; i++) {
+                    const orb = xpOrbs[i];
+                    const dx = p.x - orb.x;
+                    const dy = p.y - orb.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < p.radius + orb.radius) {
+                        orb.takeDamage(p.damage); 
+                        if (orb.health <= 0) {
+                            player.xp += orb.xpValue;
+                            orb.explode();
+                            xpOrbs.splice(i, 1);
+                            i--; 
+                            checkLevelUp();
+                            if (!orb.isFixedCount) {
+                                xpOrbs.push(orb instanceof PreciousSquare ? createRandomSquare() : createRandomOrb());
+                            }
+                        }
+                        updateUI();
+                        return false; 
+                    }
+                }
+                return !p.isExpired() && p.x > 0 && p.x < WORLD_SIZE && p.y > 0 && p.y < WORLD_SIZE;
+            });
+            
+            virusProjectiles = virusProjectiles.filter(p => {
+                p.update();
+                const dx = p.x - player.x;
+                const dy = p.y - player.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < p.radius + player.radius) {
+                    player.hp = Math.max(0, player.hp - p.damage);
+                    updateUI();
+                    return false; 
+                }
+                return !p.isExpired();
+            });
+
+            xpOrbs.forEach(orb => orb.update(currentTime));
+            fragments = fragments.filter(f => {
+                f.update();
+                return f.life > 0;
+            });
+
+            xpOrbs.forEach(orb => {
+                const dx = player.x - orb.x;
+                const dy = player.y - orb.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < player.radius + orb.radius + 50) { 
+                    const angle = Math.atan2(dy, dx);
+                    const overlap = (player.radius + orb.radius + 50) - distance;
+                    const force = overlap * REPULSION_FORCE;
+                    orb.velX -= Math.cos(angle) * force / orb.mass;
+                    orb.velY -= Math.sin(angle) * force / orb.mass;
+                }
+            });
+            
+            if (player.hp <= 0) endGame();
+        }
+        
+        function drawGrid(ctx, cameraX, cameraY) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'; ctx.lineWidth = 1;
+            const startWorldX = Math.floor(cameraX / GRID_SPACING) * GRID_SPACING;
+            const startWorldY = Math.floor(cameraY / GRID_SPACING) * GRID_SPACING;
+            const endScreenX = screenWidth;
+            const endScreenY = screenHeight;
+            ctx.beginPath();
+            for (let x = startWorldX; x < cameraX + screenWidth; x += GRID_SPACING) {
+                const screenX = x - cameraX;
+                if (screenX >= 0 && screenX <= endScreenX) { ctx.moveTo(screenX, 0); ctx.lineTo(screenX, endScreenY); }
+            }
+            for (let y = startWorldY; y < cameraY + screenHeight; y += GRID_SPACING) {
+                const screenY = y - cameraY;
+                if (screenY >= 0 && screenY <= endScreenY) { ctx.moveTo(0, screenY); ctx.lineTo(endScreenX, screenY); }
+            }
+            ctx.stroke();
+        }
+
+        function drawGame() {
+            ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, screenWidth, screenHeight);
+            const cameraX = camera.x; const cameraY = camera.y;
+            drawGrid(ctx, cameraX, cameraY);
+            ctx.strokeStyle = '#55ff55'; ctx.lineWidth = 100; 
+            ctx.strokeRect(-cameraX - 50, -cameraY - 50, WORLD_SIZE + 100, WORLD_SIZE + 100);
+            xpOrbs.forEach(orb => orb.draw(ctx, cameraX, cameraY));
+            fragments.forEach(f => f.draw(ctx, cameraX, cameraY));
+            virusProjectiles.forEach(p => p.draw(ctx, cameraX, cameraY));
+            projectiles.forEach(p => p.draw(ctx, cameraX, cameraY));
+            drawPlayer(ctx, player, cameraX, cameraY);
+            drawMinimap();
+        }
+        
+        function drawMinimap() {
+            minimapCtx.clearRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
+            minimapCtx.fillStyle = '#000000'; minimapCtx.fillRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
+            xpOrbs.forEach(orb => {
+                const mapX = orb.x * MINIMAP_SCALE; const mapY = orb.y * MINIMAP_SCALE;
+                minimapCtx.fillStyle = orb.color; minimapCtx.beginPath();
+                minimapCtx.arc(mapX, mapY, 1, 0, Math.PI * 2); minimapCtx.fill();
+            });
+            const miniPlayerX = player.x * MINIMAP_SCALE; const miniPlayerY = player.y * MINIMAP_SCALE;
+            minimapCtx.fillStyle = player.projectileColor; minimapCtx.beginPath();
+            minimapCtx.arc(miniPlayerX, miniPlayerY, 3, 0, Math.PI * 2); minimapCtx.fill();
+            const viewRectX = camera.x * MINIMAP_SCALE; const viewRectY = camera.y * MINIMAP_SCALE;
+            const viewRectW = screenWidth * MINIMAP_SCALE; const viewRectH = screenHeight * MINIMAP_SCALE;
+            minimapCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; minimapCtx.lineWidth = 1;
+            minimapCtx.strokeRect(viewRectX, viewRectY, viewRectW, viewRectH);
+        }
+
+        function gameLoop(timestamp) {
+            if (!running) return;
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+            currentTime = timestamp; 
+            updatePlayer(deltaTime);
+            updateEntities(deltaTime);
+            drawGame();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function endGame() {
+            running = false;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(0, 0, screenWidth, screenHeight);
+            ctx.fillStyle = 'red'; ctx.font = '50px Orbitron'; ctx.textAlign = 'center';
+            ctx.fillText("PARTIE TERMINÉE", screenWidth / 2, screenHeight / 2 - 30);
+            ctx.fillStyle = 'white'; ctx.font = '30px Orbitron';
+            ctx.fillText(`Niveau Atteint: ${player.level} (${player.xp} XP)`, screenWidth / 2, screenHeight / 2 + 30);
+            setTimeout(() => {
+                gameScreen.style.display = 'none';
+                menuScreen.style.display = 'flex';
+                player.xp = 0; player.level = 1;
+                updateUI();
+            }, 5000);
+        }
+        
+        function updateUI() {
+            const level = player.level; const currentExp = player.xp;
+            const previousLevelExp = level > 1 ? getRequiredTotalExpForNextLevel(level - 1) : 0;
+            const nextLevelThreshold = getRequiredTotalExpForNextLevel(level);
+            const expForCurrentLevel = currentExp - previousLevelExp;
+            const expRequired = nextLevelThreshold - previousLevelExp;
+            const expRatio = expRequired > 0 ? expForCurrentLevel / expRequired : 1;
+            const expPercentage = Math.min(100, expRatio * 100);
+            levelText.textContent = `NIV. ${level}`;
+            if (level < MAX_LEVEL) {
+                expProgress.style.width = `${expPercentage}%`;
+                expLabel.textContent = `${expForCurrentLevel.toFixed(0)} / ${expRequired.toFixed(0)} EXP`;
+                expProgress.style.borderRight = '1px solid white';
+                expLabel.style.color = expPercentage > 50 ? 'var(--dark-bg)' : 'white';
+            } else {
+                expProgress.style.width = '100%';
+                expLabel.textContent = `NIVEAU MAX (${currentExp.toFixed(0)} XP)`;
+                expProgress.style.borderRight = 'none';
+                expLabel.style.color = 'var(--dark-bg)';
+            }
+            hpInfo.textContent = `HP: ${player.hp.toFixed(0)} / ${player.maxHp}`;
+            hpInfo.style.color = player.hp / player.maxHp < 0.25 ? '#ff3333' : 'white';
+            if (player.type) {
+                const typeInfoData = PLAYER_TYPES[player.type];
+                typeInfo.textContent = `TYPE : ${typeInfoData.name.toUpperCase()}`;
+                typeInfo.style.borderColor = typeInfoData.color;
+                typeInfo.style.boxShadow = `0 0 10px ${PLAYER_TYPES[player.type].color}`;
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            if (running) {
+                canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+                screenWidth = canvas.width; screenHeight = canvas.height;
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            if (keys.hasOwnProperty(key)) { keys[key] = true; e.preventDefault(); }
+        });
+        window.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (keys.hasOwnProperty(key)) { keys[key] = false; }
+        });
+        window.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
+        window.addEventListener('click', (e) => {
+            if (!running) return;
+            const dx = e.clientX - screenWidth / 2; const dy = e.clientY - screenHeight / 2;
+            const angle = Math.atan2(dy, dx);
+            const damage = BASE_PROJECTILE_DAMAGE * player.damageModifier * (1 + (player.level - 1) * 0.1); 
+            projectiles.push(new Projectile(player.x, player.y, angle, damage, player.type));
+        });
+        
+        let selectedType = null;
+        typeButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                typeButtons.forEach(btn => btn.classList.remove('selected'));
+                button.classList.add('selected');
+                selectedType = button.getAttribute('data-type');
+                playButton.disabled = false;
+            });
+        });
+        playButton.addEventListener('click', () => {
+            if (selectedType && PLAYER_TYPES[selectedType]) {
+                const typeProps = PLAYER_TYPES[selectedType];
+                player.type = selectedType; player.projectileColor = typeProps.color;
+                player.damageModifier = typeProps.damageModifier; player.speedModifier = typeProps.speedModifier;
+                player.baseProjectileSpeed = typeProps.baseProjectileSpeed;
+                player.radius = PLAYER_RADIUS + (player.level - 1) * 2; 
+                initGame();
+            } else { console.error("Veuillez sélectionner un type avant de jouer."); }
+        });
+        
+        window.onload = () => {
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            screenWidth = canvas.width; screenHeight = canvas.height;
+            minimapCanvas.width = MINIMAP_SIZE; minimapCanvas.height = MINIMAP_SIZE;
+            MINIMAP_SCALE = MINIMAP_SIZE / WORLD_SIZE; 
+            setTimeout(initFirebase, 0);
+        };
+        
+        async function initFirebase() { /* Logique Firebase standard */ }
+
+    </script>
+</body>
+</html>
