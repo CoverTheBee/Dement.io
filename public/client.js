@@ -22,7 +22,7 @@ let keys = { 'z': false, 's': false, 'q': false, 'd': false };
 let mouse = { x: 0, y: 0 };
 let camera = { x: 0, y: 0 };
 let screenWidth, screenHeight;
-let selectedType = null;
+let selectedType = 'FEU'; // Type par défaut
 let currentRoom = 'principal';
 let roomPlayers = new Map();
 
@@ -30,7 +30,7 @@ let roomPlayers = new Map();
 const localPlayer = {
     x: WORLD_SIZE / 2,
     y: WORLD_SIZE / 2,
-    type: null,
+    type: 'FEU',
     name: '',
     level: 1,
     hp: 100,
@@ -47,6 +47,9 @@ function initNetwork() {
     socket.on('connect', () => {
         updateConnectionStatus('🟢 Connecté', '#00ff00');
         console.log('🔗 Connecté au serveur');
+        
+        // Rejoindre automatiquement le salon principal
+        joinRoom('principal');
     });
 
     socket.on('disconnect', () => {
@@ -54,19 +57,27 @@ function initNetwork() {
         console.log('❌ Déconnecté du serveur');
     });
 
-    // Initialisation du jeu
-    socket.on('gameInit', (data) => {
-        playerId = data.playerId;
-        gameInitialized = true;
-        console.log('🎮 Jeu initialisé, ID:', playerId);
-    });
-
     // Message de bienvenue dans un salon
     socket.on('welcomeMessage', (data) => {
         console.log(`🎪 Bienvenue dans le salon: ${data.room}`);
         currentRoom = data.room;
         playerId = data.playerId;
+        localPlayer.name = data.playerName;
+        localPlayer.type = data.playerType;
+        gameInitialized = true;
+        
         updateRoomInfo();
+        updatePlayerUI();
+        
+        // Cacher le menu et montrer le jeu
+        menuScreen.style.display = 'none';
+        gameScreen.style.display = 'flex';
+        
+        // Démarrer la boucle de jeu
+        if (!window.gameLoopRunning) {
+            window.gameLoopRunning = true;
+            gameLoop();
+        }
     });
 
     // Mise à jour des joueurs du salon
@@ -74,9 +85,13 @@ function initNetwork() {
         roomPlayers.clear();
         data.players.forEach(player => {
             roomPlayers.set(player.id, player);
+            if (player.id !== playerId) {
+                otherPlayers.set(player.id, player);
+            }
         });
         updateRoomInfo();
         updatePlayersList();
+        console.log(`👥 ${roomPlayers.size} joueurs dans le salon`);
     });
 
     // État du jeu du serveur
@@ -105,14 +120,21 @@ function initNetwork() {
 
     // Joueur touché
     socket.on('playerHit', (data) => {
+        console.log(`💥 Joueur ${data.playerId} touché: -${data.damage} PV`);
+        
         if (data.playerId === playerId) {
             createDamageEffect(localPlayer.x, localPlayer.y);
             updatePlayerUI();
+            
+            // Afficher les dégâts reçus
+            showDamageText(data.damage, localPlayer.x, localPlayer.y);
         }
     });
 
     // Joueur mort
     socket.on('playerDied', (data) => {
+        console.log(`💀 Joueur ${data.playerId} tué par ${data.killerId}`);
+        
         if (data.playerId === playerId) {
             showDeathScreen(data.killerId);
         }
@@ -160,6 +182,7 @@ function joinRoom(roomName = 'principal') {
     });
     
     localPlayer.name = playerName;
+    localPlayer.type = selectedType;
 }
 
 // ==================== EFFETS VISUELS ====================
@@ -196,6 +219,37 @@ class Fragment {
         ctx.restore();
     }
 }
+
+class DamageText {
+    constructor(x, y, damage) {
+        this.x = x;
+        this.y = y;
+        this.text = `-${damage}`;
+        this.life = 100;
+        this.yOffset = 0;
+    }
+    
+    update() {
+        this.life -= 2;
+        this.yOffset += 0.5;
+    }
+    
+    draw(ctx, cameraX, cameraY) {
+        const screenX = this.x - cameraX;
+        const screenY = this.y - cameraY - this.yOffset;
+        const opacity = this.life / 100;
+        
+        ctx.save();
+        ctx.globalAlpha = opacity;
+        ctx.fillStyle = '#ff0000';
+        ctx.font = 'bold 16px Orbitron';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.text, screenX, screenY);
+        ctx.restore();
+    }
+}
+
+let damageTexts = [];
 
 function createShootEffect(x, y, angle, type) {
     const colors = {
@@ -239,6 +293,10 @@ function createExplosionEffect(playerId) {
     }
 }
 
+function showDamageText(damage, x, y) {
+    damageTexts.push(new DamageText(x, y, damage));
+}
+
 // ==================== DESSIN ====================
 function drawGame() {
     // Fond
@@ -275,6 +333,9 @@ function drawGame() {
     
     // Fragments
     fragments.forEach(f => f.draw(ctx, cameraX, cameraY));
+    
+    // Textes de dégâts
+    damageTexts.forEach(text => text.draw(ctx, cameraX, cameraY));
 }
 
 function drawGrid(ctx, cameraX, cameraY) {
@@ -433,7 +494,7 @@ function showDeathScreen(killerId) {
     if (killer) {
         killerInfo.textContent = `Tué par ${killer.name} (Niv.${killer.level})`;
     } else {
-        killerInfo.textContent = '';
+        killerInfo.textContent = 'Vous êtes mort';
     }
     
     deathScreen.style.display = 'flex';
@@ -467,6 +528,12 @@ function gameLoop() {
     fragments = fragments.filter(f => {
         f.update();
         return f.life > 0;
+    });
+    
+    // Mettre à jour les textes de dégâts
+    damageTexts = damageTexts.filter(text => {
+        text.update();
+        return text.life > 0;
     });
     
     // Dessiner
@@ -520,9 +587,6 @@ typeButtons.forEach(button => {
         button.classList.add('selected');
         selectedType = button.getAttribute('data-type');
         playButton.disabled = false;
-        
-        // Afficher la sélection de salon
-        document.getElementById('room-selection').style.display = 'block';
     });
 });
 
@@ -534,13 +598,6 @@ playButton.addEventListener('click', () => {
     const roomName = roomInput?.value.trim() || 'principal';
     
     joinRoom(roomName);
-    
-    localPlayer.type = selectedType;
-    
-    menuScreen.style.display = 'none';
-    gameScreen.style.display = 'flex';
-    
-    gameLoop();
 });
 
 // Bouton rejoindre salon

@@ -11,22 +11,19 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, { 
   cors: { 
-    origin: "*", // Autorise toutes les origines pour le multijoueur
+    origin: "*",
     methods: ["GET", "POST"]
   } 
 });
 
 const PORT = process.env.PORT || 3000;
 
-// Servir les fichiers statiques
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Route racine
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Route pour avoir un lien de statut
 app.get('/status', (req, res) => {
   res.json({
     status: 'online',
@@ -44,7 +41,7 @@ const PLAYER_SPEED = 0.3;
 const MAX_VELOCITY = 4;
 const PLAYER_RADIUS = 20;
 const FRICTION = 0.90;
-const BASE_PROJECTILE_DAMAGE = 10;
+const BASE_PROJECTILE_DAMAGE = 10; // 10 dégâts par tir
 const PROJECTILE_DURATION = 2000;
 
 const PLAYER_TYPES = {
@@ -263,14 +260,16 @@ function gameLoop() {
       continue;
     }
 
-    // Vérifier les collisions avec les joueurs
+    // VÉRIFIER LES COLLISIONS AVEC LES JOUEURS
     for (const [playerId, player] of gameState.players) {
+      // Ignorer le tireur, les morts, et les joueurs d'autres salons
       if (playerId === projectile.shooterId || !player.alive || player.room !== projectile.room) continue;
       
       const dx = projectile.x - player.x;
       const dy = projectile.y - player.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
       
+      // Collision détectée !
       if (distance < projectile.radius + player.radius) {
         const damageResult = player.takeDamage(projectile.damage, projectile.shooterId);
         
@@ -278,7 +277,8 @@ function gameLoop() {
         io.to(player.room).emit('playerHit', {
           playerId: playerId,
           damage: projectile.damage,
-          newHp: player.hp
+          newHp: player.hp,
+          attackerId: projectile.shooterId
         });
 
         if (damageResult.died) {
@@ -288,6 +288,7 @@ function gameLoop() {
           });
         }
 
+        // Supprimer le projectile après collision
         gameState.projectiles.splice(i, 1);
         break;
       }
@@ -325,7 +326,36 @@ io.on('connection', (socket) => {
   console.log('🔗 Nouvelle connexion:', socket.id);
   let currentRoom = 'principal';
 
-  // REJOINDRE UN SALON
+  // REJOINDRE AUTOMATIQUEMENT LE SALON PRINCIPAL
+  const playerName = `Mage_${Math.random().toString(36).substr(2, 4)}`;
+  const playerType = 'FEU'; // Type par défaut
+  
+  const newPlayer = new ServerPlayer(socket.id, playerType, playerName);
+  
+  rooms.get('principal').addPlayer(socket.id, newPlayer);
+  gameState.players.set(socket.id, newPlayer);
+  socket.join('principal');
+  
+  console.log(`🎮 ${playerName} a rejoint le salon principal (${rooms.get('principal').getPlayerCount()} joueurs)`);
+  
+  // Informer le client
+  socket.emit('welcomeMessage', {
+    room: 'principal',
+    playerCount: rooms.get('principal').getPlayerCount(),
+    playerId: socket.id,
+    playerName: playerName,
+    playerType: playerType
+  });
+  
+  // Mettre à jour tous les joueurs du salon
+  io.to('principal').emit('roomUpdate', {
+    players: rooms.get('principal').getPlayersData(),
+    room: 'principal'
+  });
+  
+  gameState.shouldSendUpdate = true;
+
+  // REJOINDRE UN SALON SPÉCIFIQUE
   socket.on('joinRoom', (data) => {
     const roomName = data.room || 'principal';
     const playerData = data.playerData;
@@ -346,23 +376,25 @@ io.on('connection', (socket) => {
     currentRoom = roomName;
     const room = rooms.get(roomName);
     
-    const newPlayer = new ServerPlayer(
+    const updatedPlayer = new ServerPlayer(
       socket.id, 
-      playerData.type, 
-      playerData.name || `Mage_${Math.random().toString(36).substr(2, 4)}`
+      playerData.type || playerType,
+      playerData.name || playerName
     );
     
-    room.addPlayer(socket.id, newPlayer);
-    gameState.players.set(socket.id, newPlayer);
+    room.addPlayer(socket.id, updatedPlayer);
+    gameState.players.set(socket.id, updatedPlayer);
     socket.join(roomName);
     
-    console.log(`🎮 ${newPlayer.name} a rejoint le salon ${roomName} (${room.getPlayerCount()} joueurs)`);
+    console.log(`🎮 ${updatedPlayer.name} a rejoint le salon ${roomName} (${room.getPlayerCount()} joueurs)`);
     
     // Informer le client
     socket.emit('welcomeMessage', {
       room: roomName,
       playerCount: room.getPlayerCount(),
-      playerId: socket.id
+      playerId: socket.id,
+      playerName: updatedPlayer.name,
+      playerType: updatedPlayer.type
     });
     
     // Mettre à jour tous les joueurs du salon
@@ -438,7 +470,7 @@ setInterval(sendGameState, 1000 / 20); // 20 FPS réseau
 server.listen(PORT, () => {
   console.log(`🚀 Serveur Mage PVP démarré sur le port ${PORT}`);
   console.log(`🌍 Monde: ${WORLD_SIZE}x${WORLD_SIZE}`);
-  console.log(`🎯 Mode: Server-Authoritative avec Salons`);
+  console.log(`🎯 Dégâts des tirs: ${BASE_PROJECTILE_DAMAGE}`);
   console.log(`🔗 Statut: http://localhost:${PORT}/status`);
   console.log(`🎮 Jouez: http://localhost:${PORT}`);
 });
